@@ -783,23 +783,6 @@
         master.connect(comp);
         comp.connect(c.destination);
 
-        // Soft air whoosh (filtered noise, viscous sweep)
-        const src = c.createBufferSource();
-        src.buffer = noiseBuffer(c, 3.2);
-        const bp = c.createBiquadFilter();
-        bp.type = "bandpass";
-        bp.Q.value = 0.55;
-        bp.frequency.setValueAtTime(420, t0);
-        bp.frequency.exponentialRampToValueAtTime(1800, t0 + 1.1);
-        bp.frequency.exponentialRampToValueAtTime(280, t0 + 2.8);
-        const ng = c.createGain();
-        env(ng, t0, 0.35, 0.55, 2.0, 0.14);
-        src.connect(bp);
-        bp.connect(ng);
-        ng.connect(master);
-        src.start(t0);
-        src.stop(t0 + 3.2);
-
         // Warm low bloom
         tone(c, master, 92, "sine", t0 + 0.05, 0.45, 0.4, 1.8, 0.12, 0);
         tone(c, master, 138, "sine", t0 + 0.08, 0.5, 0.35, 1.7, 0.07, 8);
