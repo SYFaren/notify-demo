@@ -1,0 +1,932 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Notify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    :root {
+      --bg-top: #0c1f1a;
+      --bg-bottom: #163528;
+      --ink: #e8f5ef;
+      --muted: #9bb5a8;
+      --accent: #3dd68c;
+      --danger: #ff7b7b;
+      --panel: rgba(232, 245, 239, 0.06);
+      --line: rgba(232, 245, 239, 0.12);
+      --shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(ellipse 80% 50% at 20% 0%, rgba(61, 214, 140, 0.18), transparent 55%),
+        radial-gradient(ellipse 60% 40% at 90% 100%, rgba(42, 159, 104, 0.2), transparent 50%),
+        linear-gradient(160deg, var(--bg-top), var(--bg-bottom));
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      overflow: hidden;
+    }
+
+    main {
+      position: relative;
+      z-index: 1;
+      width: min(440px, 100%);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-family: "Syne", sans-serif;
+      font-weight: 800;
+      font-size: clamp(2.4rem, 8vw, 3.2rem);
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .lede {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 1.05rem;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 18px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .badge i {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--muted);
+      display: inline-block;
+    }
+
+    .badge.ready {
+      color: var(--accent);
+      border-color: rgba(61, 214, 140, 0.28);
+    }
+
+    .badge.ready i {
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(61, 214, 140, 0.18);
+    }
+
+    .badge.blocked {
+      color: var(--danger);
+      border-color: rgba(255, 123, 123, 0.28);
+    }
+
+    .badge.blocked i { background: var(--danger); }
+
+    .ask-wrap { margin: 0 0 14px; }
+    .ask-wrap[hidden] { display: none !important; }
+
+    form {
+      display: flex;
+      gap: 10px;
+      padding: 10px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: var(--shadow);
+    }
+
+    form.is-locked {
+      opacity: 0.55;
+      pointer-events: none;
+    }
+
+    input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-size: 1rem;
+      padding: 12px 14px;
+    }
+
+    input::placeholder { color: var(--muted); }
+
+    button {
+      border: 0;
+      border-radius: 12px;
+      padding: 12px 18px;
+      min-width: 88px;
+      background: var(--accent);
+      color: #062216;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+      white-space: nowrap;
+    }
+
+    button:hover { background: #55e09d; }
+    button:active { transform: scale(0.97); }
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button.secondary {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      min-width: 0;
+    }
+
+    button.secondary:hover { background: var(--panel); }
+
+    .note {
+      margin-top: 16px;
+      min-height: 1.3em;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.4;
+      transition: opacity 0.5s ease, color 0.5s ease;
+    }
+
+    .note.sent { color: var(--accent); }
+
+    /* Blur plate — always soft opacity, never hard cut */
+    #blur-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 40;
+      pointer-events: none;
+      opacity: 0;
+      will-change: opacity;
+    }
+
+    #blur-tint {
+      position: fixed;
+      inset: 0;
+      z-index: 41;
+      pointer-events: none;
+      background: rgba(6, 10, 14, 0.32);
+      opacity: 0;
+      will-change: opacity;
+    }
+
+    #wave {
+      position: fixed;
+      inset: 0;
+      z-index: 45;
+      pointer-events: none;
+      overflow: hidden;
+      opacity: 0;
+      will-change: opacity;
+    }
+
+    .wave-ring {
+      position: absolute;
+      left: var(--ox, 50%);
+      top: var(--oy, 50%);
+      width: 48px;
+      height: 48px;
+      margin: -24px 0 0 -24px;
+      border-radius: 50%;
+      border: 1.5px solid rgba(255, 255, 255, 0.26);
+      opacity: 0;
+      transform: scale(0.12);
+      will-change: transform, opacity;
+      filter: blur(0.2px);
+    }
+
+    .wave-ring.run {
+      animation: soft-wave var(--dur, 3.2s) cubic-bezier(0.12, 0.7, 0.1, 1) forwards;
+      animation-delay: var(--delay, 0s);
+    }
+
+    .wave-glow {
+      position: absolute;
+      left: var(--ox, 50%);
+      top: var(--oy, 50%);
+      width: 36px;
+      height: 36px;
+      margin: -18px 0 0 -18px;
+      border-radius: 50%;
+      background: radial-gradient(circle,
+        rgba(255, 255, 255, 0.5) 0%,
+        rgba(90, 200, 255, 0.26) 24%,
+        rgba(61, 214, 140, 0.12) 48%,
+        transparent 74%);
+      opacity: 0;
+      transform: scale(0.2);
+      mix-blend-mode: screen;
+      filter: blur(2px);
+      will-change: transform, opacity;
+    }
+
+    .wave-glow.run {
+      animation: soft-glow 3.4s cubic-bezier(0.12, 0.7, 0.1, 1) forwards;
+    }
+
+    .wave-core {
+      position: absolute;
+      left: var(--ox, 50%);
+      top: var(--oy, 50%);
+      width: 12px;
+      height: 12px;
+      margin: -6px 0 0 -6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.92);
+      box-shadow: 0 0 28px rgba(255, 255, 255, 0.5), 0 0 60px rgba(90, 200, 255, 0.32);
+      opacity: 0;
+      transform: scale(0.3);
+      will-change: transform, opacity;
+    }
+
+    .wave-core.run {
+      animation: soft-core 3.2s cubic-bezier(0.18, 0.85, 0.12, 1) forwards;
+    }
+
+    .wave-label {
+      position: absolute;
+      left: 50%;
+      bottom: 12%;
+      transform: translateX(-50%) translateY(8px);
+      color: rgba(255, 255, 255, 0.78);
+      font-size: 0.92rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      opacity: 0;
+      text-shadow: 0 2px 20px rgba(0, 0, 0, 0.45);
+      max-width: min(80vw, 340px);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      transition: opacity 1.1s cubic-bezier(0.22, 1, 0.36, 1), transform 1.1s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .wave-label.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    @keyframes soft-wave {
+      0% {
+        opacity: 0;
+        transform: scale(0.08);
+      }
+      14% {
+        opacity: 0.5;
+      }
+      58% {
+        opacity: 0.18;
+      }
+      100% {
+        opacity: 0;
+        transform: scale(var(--scale, 55));
+      }
+    }
+
+    @keyframes soft-glow {
+      0% {
+        opacity: 0;
+        transform: scale(0.15);
+      }
+      20% {
+        opacity: 0.8;
+      }
+      55% {
+        opacity: 0.42;
+      }
+      100% {
+        opacity: 0;
+        transform: scale(78);
+      }
+    }
+
+    @keyframes soft-core {
+      0% {
+        opacity: 0;
+        transform: scale(0.2);
+      }
+      18% {
+        opacity: 1;
+        transform: scale(1.15);
+      }
+      45% {
+        opacity: 0.85;
+        transform: scale(1);
+      }
+      75% {
+        opacity: 0.4;
+        transform: scale(1.25);
+      }
+      100% {
+        opacity: 0;
+        transform: scale(0.15);
+      }
+    }
+
+    @media (max-width: 520px) {
+      form { flex-direction: column; }
+      button { width: 100%; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+    <h1>Notify</h1>
+    <p class="lede">Type something — get a system notification.</p>
+
+    <div class="badge" id="badge" hidden><i></i><span id="badgeText"></span></div>
+
+    <div class="ask-wrap" id="askWrap" hidden>
+      <button class="secondary" type="button" id="ask">Allow notifications</button>
+    </div>
+
+    <form id="form">
+      <input id="message" type="text" placeholder="Hello, world" maxlength="200" autocomplete="off" autofocus />
+      <button type="submit" id="send">Send</button>
+    </form>
+
+    <p class="note" id="note"></p>
+  </main>
+
+  <canvas id="blur-canvas" aria-hidden="true"></canvas>
+  <div id="blur-tint" aria-hidden="true"></div>
+
+  <div id="wave" aria-hidden="true">
+    <div class="wave-glow" id="waveGlow"></div>
+    <div class="wave-core" id="waveCore"></div>
+    <div class="wave-label" id="waveLabel"></div>
+  </div>
+
+  <script>
+    class DualKawaseBlur {
+      constructor(canvas) {
+        this.canvas = canvas;
+        const gl = canvas.getContext("webgl", {
+          alpha: false,
+          antialias: false,
+          premultipliedAlpha: false,
+          preserveDrawingBuffer: true,
+        });
+        if (!gl) throw new Error("WebGL unavailable");
+        this.gl = gl;
+        this.maxLevels = 6;
+        this._init();
+      }
+
+      _compile(type, src) {
+        const gl = this.gl;
+        const sh = gl.createShader(type);
+        gl.shaderSource(sh, src);
+        gl.compileShader(sh);
+        if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+          throw new Error(gl.getShaderInfoLog(sh) || "shader error");
+        }
+        return sh;
+      }
+
+      _program(vs, fs) {
+        const gl = this.gl;
+        const p = gl.createProgram();
+        gl.attachShader(p, this._compile(gl.VERTEX_SHADER, vs));
+        gl.attachShader(p, this._compile(gl.FRAGMENT_SHADER, fs));
+        gl.linkProgram(p);
+        if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+          throw new Error(gl.getProgramInfoLog(p) || "link error");
+        }
+        return p;
+      }
+
+      _init() {
+        const gl = this.gl;
+        const vert = `
+          attribute vec2 aPos;
+          varying vec2 vUv;
+          void main() {
+            vUv = aPos * 0.5 + 0.5;
+            gl_Position = vec4(aPos, 0.0, 1.0);
+          }
+        `;
+        const downFrag = `
+          precision mediump float;
+          varying vec2 vUv;
+          uniform sampler2D uTex;
+          uniform vec2 uOffset;
+          void main() {
+            vec4 sum = texture2D(uTex, vUv) * 4.0;
+            sum += texture2D(uTex, vUv - uOffset.xy);
+            sum += texture2D(uTex, vUv + uOffset.xy);
+            sum += texture2D(uTex, vUv + vec2(uOffset.x, -uOffset.y));
+            sum += texture2D(uTex, vUv - vec2(uOffset.x, -uOffset.y));
+            gl_FragColor = sum * 0.125;
+          }
+        `;
+        const upFrag = `
+          precision mediump float;
+          varying vec2 vUv;
+          uniform sampler2D uTex;
+          uniform vec2 uOffset;
+          void main() {
+            vec4 sum = texture2D(uTex, vUv + vec2(-uOffset.x * 2.0, 0.0));
+            sum += texture2D(uTex, vUv + vec2(-uOffset.x, uOffset.y)) * 2.0;
+            sum += texture2D(uTex, vUv + vec2(0.0, uOffset.y * 2.0));
+            sum += texture2D(uTex, vUv + vec2(uOffset.x, uOffset.y)) * 2.0;
+            sum += texture2D(uTex, vUv + vec2(uOffset.x * 2.0, 0.0));
+            sum += texture2D(uTex, vUv + vec2(uOffset.x, -uOffset.y)) * 2.0;
+            sum += texture2D(uTex, vUv + vec2(0.0, -uOffset.y * 2.0));
+            sum += texture2D(uTex, vUv + vec2(-uOffset.x, -uOffset.y)) * 2.0;
+            gl_FragColor = sum / 12.0;
+          }
+        `;
+        const copyFrag = `
+          precision mediump float;
+          varying vec2 vUv;
+          uniform sampler2D uTex;
+          void main() {
+            gl_FragColor = texture2D(uTex, vUv);
+          }
+        `;
+
+        this.downProg = this._program(vert, downFrag);
+        this.upProg = this._program(vert, upFrag);
+        this.copyProg = this._program(vert, copyFrag);
+
+        this.buf = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
+        ]), gl.STATIC_DRAW);
+
+        this.sourceTex = null;
+        this.levels = [];
+      }
+
+      _createTarget(w, h) {
+        const gl = this.gl;
+        const tex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+        return { tex, fbo, w, h };
+      }
+
+      _destroyLevels() {
+        const gl = this.gl;
+        for (const lvl of this.levels) {
+          gl.deleteTexture(lvl.tex);
+          gl.deleteFramebuffer(lvl.fbo);
+        }
+        this.levels = [];
+        if (this.sourceTex) {
+          gl.deleteTexture(this.sourceTex);
+          this.sourceTex = null;
+        }
+      }
+
+      upload(image) {
+        const gl = this.gl;
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const w = Math.max(2, Math.floor(window.innerWidth * dpr));
+        const h = Math.max(2, Math.floor(window.innerHeight * dpr));
+        this.canvas.width = w;
+        this.canvas.height = h;
+        this._destroyLevels();
+
+        this.sourceTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this.sourceTex);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+
+        let lw = w;
+        let lh = h;
+        for (let i = 0; i < this.maxLevels; i++) {
+          lw = Math.max(2, lw >> 1);
+          lh = Math.max(2, lh >> 1);
+          this.levels.push(this._createTarget(lw, lh));
+        }
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+        this.render(0);
+      }
+
+      _draw(prog, tex, target, offsetScale) {
+        const gl = this.gl;
+        gl.useProgram(prog);
+        if (target) {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
+          gl.viewport(0, 0, target.w, target.h);
+        } else {
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+        }
+        const aPos = gl.getAttribLocation(prog, "aPos");
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buf);
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, tex);
+        gl.uniform1i(gl.getUniformLocation(prog, "uTex"), 0);
+        const offsetLoc = gl.getUniformLocation(prog, "uOffset");
+        if (offsetLoc) {
+          const tw = target ? target.w : this.canvas.width;
+          const th = target ? target.h : this.canvas.height;
+          gl.uniform2f(offsetLoc, (0.5 * offsetScale) / tw, (0.5 * offsetScale) / th);
+        }
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      }
+
+      render(strength) {
+        const levels = Math.max(0, Math.min(this.maxLevels, Math.round(strength * this.maxLevels)));
+        if (levels === 0) {
+          this._draw(this.copyProg, this.sourceTex, null, 1);
+          return;
+        }
+        let src = this.sourceTex;
+        for (let i = 0; i < levels; i++) {
+          this._draw(this.downProg, src, this.levels[i], 1 + i * 0.5);
+          src = this.levels[i].tex;
+        }
+        for (let i = levels - 2; i >= 0; i--) {
+          this._draw(this.upProg, src, this.levels[i], 1 + i * 0.5);
+          src = this.levels[i].tex;
+        }
+        this._draw(this.upProg, src, null, 1);
+      }
+    }
+
+    const badge = document.getElementById("badge");
+    const badgeText = document.getElementById("badgeText");
+    const askWrap = document.getElementById("askWrap");
+    const askBtn = document.getElementById("ask");
+    const noteEl = document.getElementById("note");
+    const form = document.getElementById("form");
+    const input = document.getElementById("message");
+    const sendBtn = document.getElementById("send");
+    const blurCanvas = document.getElementById("blur-canvas");
+    const blurTint = document.getElementById("blur-tint");
+    const wave = document.getElementById("wave");
+    const waveGlow = document.getElementById("waveGlow");
+    const waveCore = document.getElementById("waveCore");
+    const waveLabel = document.getElementById("waveLabel");
+
+    const supported = "Notification" in window;
+    const insecure = !window.isSecureContext;
+    let busy = false;
+    let blurEngine = null;
+
+    try {
+      blurEngine = new DualKawaseBlur(blurCanvas);
+    } catch (e) {
+      console.warn(e);
+    }
+
+    function permission() {
+      return supported ? Notification.permission : "unsupported";
+    }
+
+    function setNote(text, sent) {
+      noteEl.textContent = text || "";
+      noteEl.classList.toggle("sent", !!sent);
+    }
+
+    function refresh() {
+      const state = permission();
+      badge.hidden = false;
+      badge.classList.remove("ready", "blocked");
+      askWrap.hidden = true;
+      form.classList.remove("is-locked");
+      if (!busy) sendBtn.disabled = false;
+      askBtn.disabled = false;
+
+      if (!supported) {
+        badge.classList.add("blocked");
+        badgeText.textContent = "Not supported";
+        form.classList.add("is-locked");
+        sendBtn.disabled = true;
+        setNote("This browser does not support system notifications.");
+        return;
+      }
+      if (insecure) {
+        badge.classList.add("blocked");
+        badgeText.textContent = "Needs localhost";
+        form.classList.add("is-locked");
+        sendBtn.disabled = true;
+        setNote("Open via http://localhost:5173 — file:// blocks notifications.");
+        return;
+      }
+      if (state === "granted") {
+        badge.classList.add("ready");
+        badgeText.textContent = "Notifications on";
+        if (!busy) setNote("");
+        return;
+      }
+      if (state === "denied") {
+        badge.classList.add("blocked");
+        badgeText.textContent = "Blocked";
+        form.classList.add("is-locked");
+        sendBtn.disabled = true;
+        setNote("Blocked in browser settings. Allow this site → Notifications, then refresh.");
+        return;
+      }
+      badgeText.textContent = "Permission needed";
+      askWrap.hidden = false;
+      setNote("Allow once — then just type and send.");
+    }
+
+    async function askPermission() {
+      if (!supported || insecure) {
+        refresh();
+        return false;
+      }
+      if (permission() === "granted") {
+        refresh();
+        return true;
+      }
+      if (permission() === "denied") {
+        refresh();
+        return false;
+      }
+      askBtn.disabled = true;
+      askBtn.textContent = "Waiting…";
+      setNote("Check the browser prompt above.");
+      let result = "default";
+      try {
+        result = await Notification.requestPermission();
+      } finally {
+        askBtn.textContent = "Allow notifications";
+        askBtn.disabled = false;
+      }
+      refresh();
+      if (result === "granted") {
+        setNote("You're all set.");
+        input.focus();
+        setTimeout(() => {
+          if (noteEl.textContent === "You're all set.") setNote("");
+        }, 1600);
+        return true;
+      }
+      if (result === "denied") {
+        setNote("Blocked in browser settings. Allow this site → Notifications, then refresh.");
+      } else {
+        setNote("Permission not granted yet.");
+      }
+      return false;
+    }
+
+    function easeInOutCubic(t) {
+      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+    }
+
+    // Viscous / syrupy ease — slow start, heavy middle, soft settle
+    function easeViscous(t) {
+      return t * t * t * (t * (t * 6 - 15) + 10);
+    }
+
+    function easeOutViscous(t) {
+      return 1 - Math.pow(1 - t, 2.6);
+    }
+
+    function animateValue(from, to, duration, easing, onUpdate) {
+      return new Promise((resolve) => {
+        const start = performance.now();
+        function frame(now) {
+          const t = Math.min(1, (now - start) / duration);
+          try {
+            onUpdate(from + (to - from) * easing(t));
+          } catch (err) {
+            console.warn(err);
+            resolve();
+            return;
+          }
+          if (t < 1) requestAnimationFrame(frame);
+          else resolve();
+        }
+        requestAnimationFrame(frame);
+      });
+    }
+
+    function setOpacity(el, value) {
+      el.style.opacity = String(Math.max(0, Math.min(1, value)));
+    }
+
+    async function capturePage() {
+      if (typeof html2canvas !== "function") {
+        throw new Error("html2canvas failed to load");
+      }
+      return html2canvas(document.body, {
+        backgroundColor: "#0c1f1a",
+        useCORS: true,
+        allowTaint: true,
+        scale: Math.min(window.devicePixelRatio || 1, 1.5),
+        logging: false,
+        foreignObjectRendering: false,
+        ignoreElements: (el) =>
+          el.id === "blur-canvas" ||
+          el.id === "blur-tint" ||
+          el.id === "wave",
+      });
+    }
+
+    function clearWaveRings() {
+      wave.querySelectorAll(".wave-ring").forEach((el) => el.remove());
+      waveGlow.classList.remove("run");
+      waveCore.classList.remove("run");
+      void waveGlow.offsetWidth;
+      void waveCore.offsetWidth;
+    }
+
+    function spawnWave(ox, oy) {
+      clearWaveRings();
+      const diag = Math.hypot(window.innerWidth, window.innerHeight);
+      const scale = (diag * 2.55) / 48;
+
+      wave.style.setProperty("--ox", ox + "px");
+      wave.style.setProperty("--oy", oy + "px");
+
+      for (let i = 0; i < 7; i++) {
+        const ring = document.createElement("div");
+        ring.className = "wave-ring";
+        ring.style.setProperty("--delay", 220 * i + "ms");
+        ring.style.setProperty("--dur", 3.1 + i * 0.12 + "s");
+        ring.style.setProperty("--scale", String(scale));
+        ring.style.borderColor = `rgba(255,255,255,${0.32 - i * 0.03})`;
+        wave.appendChild(ring);
+        requestAnimationFrame(() => ring.classList.add("run"));
+      }
+
+      waveGlow.classList.add("run");
+      waveCore.classList.add("run");
+    }
+
+    async function playSendWave(text) {
+      // Always from page center — not the button
+      const ox = window.innerWidth / 2;
+      const oy = window.innerHeight / 2;
+
+      waveLabel.textContent = text.length > 40 ? text.slice(0, 40) + "…" : text;
+      waveLabel.classList.remove("show");
+      setOpacity(blurCanvas, 0);
+      setOpacity(blurTint, 0);
+      setOpacity(wave, 0);
+
+      let shot = null;
+      try {
+        shot = await capturePage();
+      } catch (err) {
+        console.warn("capture failed", err);
+      }
+
+      if (shot && blurEngine) {
+        try {
+          blurEngine.upload(shot);
+          blurEngine.render(0.04);
+        } catch (err) {
+          console.warn("blur upload failed", err);
+        }
+      }
+
+      spawnWave(ox, oy);
+      waveLabel.classList.add("show");
+
+      await Promise.all([
+        animateValue(0, 1, 1400, easeOutViscous, (v) => setOpacity(blurCanvas, shot && blurEngine ? v : 0)),
+        animateValue(0, 1, 1500, easeOutViscous, (v) => setOpacity(blurTint, v * 0.92)),
+        animateValue(0, 1, 1200, easeOutViscous, (v) => setOpacity(wave, v)),
+        shot && blurEngine
+          ? animateValue(0.05, 0.95, 2100, easeViscous, (v) => blurEngine.render(v))
+          : Promise.resolve(),
+      ]);
+
+      await new Promise((r) => setTimeout(r, 650));
+
+      if (shot && blurEngine) {
+        animateValue(0.95, 1, 700, easeViscous, (v) => blurEngine.render(v));
+      }
+
+      try {
+        const n = new Notification("Notify", {
+          body: text,
+          tag: "notify-demo-" + Date.now(),
+          requireInteraction: false,
+        });
+        n.onclick = () => {
+          window.focus();
+          n.close();
+        };
+      } catch (err) {
+        setNote("Error: " + (err && err.message ? err.message : String(err)));
+      }
+
+      waveLabel.textContent = "Delivered";
+      await new Promise((r) => setTimeout(r, 1100));
+
+      waveLabel.classList.remove("show");
+      await Promise.all([
+        animateValue(1, 0, 1500, easeViscous, (v) => setOpacity(wave, v)),
+        animateValue(1, 0, 1600, easeViscous, (v) => setOpacity(blurTint, v)),
+        animateValue(1, 0, 1700, easeViscous, (v) => setOpacity(blurCanvas, v)),
+        shot && blurEngine
+          ? animateValue(1, 0.08, 1500, easeViscous, (v) => blurEngine.render(v))
+          : Promise.resolve(),
+      ]);
+
+      clearWaveRings();
+      setNote("Delivered to your OS.", true);
+      setTimeout(() => {
+        if (noteEl.textContent === "Delivered to your OS.") setNote("");
+      }, 1800);
+    }
+
+    async function send(text) {
+      if (!supported || insecure) {
+        refresh();
+        return;
+      }
+      if (permission() !== "granted") {
+        const ok = await askPermission();
+        if (!ok) return;
+      }
+      try {
+        await playSendWave(text);
+      } catch (err) {
+        console.error(err);
+        setNote("Error: " + (err && err.message ? err.message : String(err)));
+        setOpacity(blurCanvas, 0);
+        setOpacity(blurTint, 0);
+        setOpacity(wave, 0);
+        clearWaveRings();
+      }
+    }
+
+    askBtn.addEventListener("click", () => askPermission());
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      if (busy) return;
+      const text = input.value.trim();
+      if (!text) {
+        setNote("Type something first.");
+        input.focus();
+        return;
+      }
+      busy = true;
+      sendBtn.disabled = true;
+      const payload = text;
+      input.value = "";
+      try {
+        await send(payload);
+      } finally {
+        busy = false;
+        if (permission() === "granted") sendBtn.disabled = false;
+        input.focus();
+      }
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") refresh();
+    });
+
+    refresh();
+  </script>
+</body>
+</html>
