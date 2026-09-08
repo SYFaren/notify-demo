@@ -1,5 +1,7 @@
 # Notify
 
+> **EVERYTHING HERE WAS WRITTEN COMPLETELY BY AI — JUST OUT OF BOREDOM.**
+
 Minimal demo: type a message → system notification.
 
 Live: https://syfaren.github.io/notify-demo/

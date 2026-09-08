@@ -173,6 +173,15 @@
 
     .note.sent { color: var(--accent); }
 
+    .ai-note {
+      margin-top: 28px;
+      font-size: 0.72rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: rgba(155, 181, 168, 0.55);
+      line-height: 1.45;
+    }
+
     /* Blur plate — always soft opacity, never hard cut */
     #blur-canvas {
       position: fixed;
@@ -744,14 +753,6 @@
         gain.gain.exponentialRampToValueAtTime(peak, t0 + attack);
         gain.gain.setValueAtTime(peak, t0 + attack + hold);
         gain.gain.exponentialRampToValueAtTime(0.0001, t0 + attack + hold + release);
-      }
-
-      function noiseBuffer(c, seconds) {
-        const len = Math.floor(c.sampleRate * seconds);
-        const buf = c.createBuffer(1, len, c.sampleRate);
-        const data = buf.getChannelData(0);
-        for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
-        return buf;
       }
 
       function tone(c, dest, freq, type, t0, attack, hold, release, peak, detune) {
